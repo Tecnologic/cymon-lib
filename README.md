@@ -80,6 +80,6 @@ auto resp = device.HandleReadSamples(frame_offset, max_frames);
 device.Tick();
 ```
 
-## Licence
+## License
 
 Apache 2.0 — see [LICENSE](LICENSE).
