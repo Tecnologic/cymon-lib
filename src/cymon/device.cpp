@@ -27,9 +27,15 @@ void Device::set_actual_sample_period_us(float us) {
 
 bool Device::RegisterVariable(std::string_view name, std::string_view unit,
                               std::function<float()> getter) {
-  if (var_count_ >= static_cast<uint8_t>(kMaxVars)) return false;
-  if (name.size() > 32U) return false;
-  if (unit.size() > 8U) return false;
+  if (var_count_ >= static_cast<uint8_t>(kMaxVars)) {
+    return false;
+  }
+  if (name.size() > 32U) {
+    return false;
+  }
+  if (unit.size() > 8U) {
+    return false;
+  }
 
   VarEntry& entry = vars_[var_count_];
   std::memset(entry.name, 0, sizeof(entry.name));
@@ -47,7 +53,9 @@ uint16_t Device::variable_count() const {
 }
 
 bool Device::GetVariable(uint16_t index, VariableInfo* info) const {
-  if (index >= var_count_) return false;
+  if (index >= var_count_) {
+    return false;
+  }
   info->id = static_cast<uint8_t>(index);
   std::memcpy(info->name, vars_[index].name, sizeof(info->name));
   std::memcpy(info->unit, vars_[index].unit, sizeof(info->unit));

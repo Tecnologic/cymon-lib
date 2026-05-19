@@ -22,13 +22,23 @@ namespace cymon {
 
 bool SampleBuffer::Setup(uint8_t num_channels, uint16_t num_samples,
                          uint16_t pretrigger_samples) {
-  if (num_channels == 0) return false;
-  if (num_channels > kMaxChannels) return false;
-  if (pretrigger_samples > num_samples) return false;
+  if (num_channels == 0) {
+    return false;
+  }
+  if (num_channels > kMaxChannels) {
+    return false;
+  }
+  if (pretrigger_samples > num_samples) {
+    return false;
+  }
 
   const uint16_t cap = static_cast<uint16_t>(kCapacityFloats / num_channels);
-  if (num_samples > cap) return false;
-  if (num_samples == 0) return false;
+  if (num_samples > cap) {
+    return false;
+  }
+  if (num_samples == 0) {
+    return false;
+  }
 
   num_channels_ = num_channels;
   num_samples_ = num_samples;
@@ -62,7 +72,9 @@ void SampleBuffer::Disarm() {
 }
 
 bool SampleBuffer::WriteFrame(const float* values) {
-  if (!armed_ || complete_) return false;
+  if (!armed_ || complete_) {
+    return false;
+  }
 
   const std::size_t offset =
       static_cast<std::size_t>(write_pos_) * num_channels_;
@@ -89,7 +101,9 @@ bool SampleBuffer::WriteFrame(const float* values) {
 }
 
 bool SampleBuffer::Trigger() {
-  if (!armed_ || triggered_) return false;
+  if (!armed_ || triggered_) {
+    return false;
+  }
 
   triggered_ = true;
   trigger_pos_ = write_pos_;
@@ -104,12 +118,16 @@ bool SampleBuffer::Trigger() {
 
 uint16_t SampleBuffer::ReadFrames(uint16_t frame_offset, uint8_t max_frames,
                                   float* out) const {
-  if (!triggered_) return 0;
+  if (!triggered_) {
+    return 0;
+  }
 
   uint16_t n = 0;
   for (uint16_t i = 0; i < max_frames; ++i) {
     const uint16_t abs_k = static_cast<uint16_t>(frame_offset + i);
-    if (abs_k >= num_samples_) break;
+    if (abs_k >= num_samples_) {
+      break;
+    }
 
     float* dest = out + static_cast<std::size_t>(n) * num_channels_;
 
@@ -119,7 +137,9 @@ uint16_t SampleBuffer::ReadFrames(uint16_t frame_offset, uint8_t max_frames,
           static_cast<uint16_t>(pretrigger_samples_ - abs_k);
       if (total_written_ < frames_before) {
         // Not enough pre-trigger data; fill zeros.
-        for (uint8_t c = 0; c < num_channels_; ++c) dest[c] = 0.0F;
+        for (uint8_t c = 0; c < num_channels_; ++c) {
+          dest[c] = 0.0F;
+        }
       } else {
         const uint16_t ring_pos =
             static_cast<uint16_t>((static_cast<uint32_t>(trigger_pos_) +
@@ -135,7 +155,9 @@ uint16_t SampleBuffer::ReadFrames(uint16_t frame_offset, uint8_t max_frames,
       // Post-trigger frame.
       const uint16_t post_idx =
           static_cast<uint16_t>(abs_k - pretrigger_samples_);
-      if (post_idx >= post_trigger_count_) break;
+      if (post_idx >= post_trigger_count_) {
+        break;
+      }
 
       const uint16_t ring_pos = static_cast<uint16_t>(
           (static_cast<uint32_t>(trigger_pos_) + post_idx) % capacity_);
