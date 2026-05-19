@@ -70,6 +70,12 @@ Device::GetBufferInfoResponse Device::HandleGetBufferInfo() const {
 Device::SetupCaptureResponse Device::HandleSetupCapture(const CaptureConfig& config) {
   SetupCaptureResponse resp;
 
+  if (config.num_channels == 0 || config.num_channels > static_cast<uint8_t>(kMaxChannels)) {
+    resp.ok = false;
+    resp.error_code = ErrorCode::kBadConfig;
+    return resp;
+  }
+
   for (uint8_t i = 0; i < config.num_channels; ++i) {
     if (config.channel_ids[i] >= var_count_) {
       resp.ok = false;

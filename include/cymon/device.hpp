@@ -36,6 +36,7 @@ class Device {
     kTooManyVars = 6,
     kNameTooLong = 7,
     kUnitTooLong = 8,
+    kBadConfig = 9,  ///< num_channels is 0 or exceeds kMaxChannels
   };
 
   struct VariableInfo {

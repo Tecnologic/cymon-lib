@@ -100,6 +100,28 @@ TEST(DeviceTest, HandleSetupCapture_BadChannelId_ReturnsError) {
   EXPECT_EQ(resp.error_code, Device::ErrorCode::kBadChannelId);
 }
 
+TEST(DeviceTest, HandleSetupCapture_ZeroChannels_ReturnsBadConfig) {
+  Device dev;
+  Device::CaptureConfig cfg;
+  cfg.num_channels = 0;
+  cfg.num_samples = 10;
+
+  const auto resp = dev.HandleSetupCapture(cfg);
+  EXPECT_FALSE(resp.ok);
+  EXPECT_EQ(resp.error_code, Device::ErrorCode::kBadConfig);
+}
+
+TEST(DeviceTest, HandleSetupCapture_TooManyChannels_ReturnsBadConfig) {
+  Device dev;
+  Device::CaptureConfig cfg;
+  cfg.num_channels = static_cast<uint8_t>(kMaxChannels) + 1U;
+  cfg.num_samples = 10;
+
+  const auto resp = dev.HandleSetupCapture(cfg);
+  EXPECT_FALSE(resp.ok);
+  EXPECT_EQ(resp.error_code, Device::ErrorCode::kBadConfig);
+}
+
 TEST(DeviceTest, HandleSetupCapture_ActualPeriodReturned) {
   Device dev;
   dev.set_actual_sample_period_us(100.0F);
