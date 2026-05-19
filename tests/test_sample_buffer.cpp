@@ -26,8 +26,9 @@ TEST(SampleBufferTest, Setup_ValidConfig_ReturnsTrue) {
 
 TEST(SampleBufferTest, Setup_TooManyChannels_ReturnsFalse) {
   SampleBuffer buf;
-  // kMaxChannels is 16; use 17 to exceed limit.
-  EXPECT_FALSE(buf.Setup(17, 10, 0));
+  // kMaxChannels + 1 is used to exceed the limit; requires kMaxChannels < 255.
+  static_assert(kMaxChannels < 255U, "test requires kMaxChannels < 255");
+  EXPECT_FALSE(buf.Setup(static_cast<uint8_t>(kMaxChannels + 1U), 10, 0));
 }
 
 TEST(SampleBufferTest, Setup_TooManySamples_ReturnsFalse) {

@@ -21,6 +21,9 @@
 #ifndef CYMON_MAX_VARS
 #define CYMON_MAX_VARS 64U
 #endif
+#ifndef CYMON_MAX_CHANNELS
+#define CYMON_MAX_CHANNELS 8U
+#endif
 
 namespace cymon {
 
@@ -31,13 +34,16 @@ inline constexpr std::size_t kMaxBufferBytes = CYMON_MAX_BUFFER_BYTES;
 
 /// Maximum number of named scalar variables that can be registered on the
 /// device (the full variable registry, e.g. every signal the firmware exposes).
-/// Override with -DCYMON_MAX_VARS=<count>.
+/// Hard upper bound is 255 (IDs are uint8). Override with -DCYMON_MAX_VARS=<count>.
 inline constexpr std::size_t kMaxVars = CYMON_MAX_VARS;
+static_assert(kMaxVars <= 255U, "CYMON_MAX_VARS must not exceed 255 (variable IDs are uint8)");
 
 /// Maximum number of variables that can be captured *simultaneously* in a
 /// single capture session. Always <= kMaxVars. A monitor selects up to
 /// kMaxChannels variables from the registry for one capture run.
-inline constexpr std::size_t kMaxChannels = 16U;
+/// Hard upper bound is 255. Override with -DCYMON_MAX_CHANNELS=<count>.
+inline constexpr std::size_t kMaxChannels = CYMON_MAX_CHANNELS;
+static_assert(kMaxChannels <= 255U, "CYMON_MAX_CHANNELS must not exceed 255 (channel IDs are uint8)");
 
 /// Maximum number of sample frames returned in a single ReadSamples response.
 inline constexpr std::size_t kMaxReadFrames = 4U;

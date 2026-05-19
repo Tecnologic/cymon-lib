@@ -24,7 +24,7 @@ Device::Device() = default;
 void Device::set_actual_sample_period_us(float us) { actual_sample_period_us_ = us; }
 
 bool Device::RegisterVariable(std::string_view name, std::string_view unit, std::function<float()> getter) {
-  if (var_count_ >= static_cast<uint8_t>(kMaxVars)) {
+  if (var_count_ >= kMaxVars) {
     return false;
   }
   if (name.size() > 32U) {
