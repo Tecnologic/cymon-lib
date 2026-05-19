@@ -21,12 +21,9 @@ namespace cymon {
 
 Device::Device() = default;
 
-void Device::set_actual_sample_period_us(float us) {
-  actual_sample_period_us_ = us;
-}
+void Device::set_actual_sample_period_us(float us) { actual_sample_period_us_ = us; }
 
-bool Device::RegisterVariable(std::string_view name, std::string_view unit,
-                              std::function<float()> getter) {
+bool Device::RegisterVariable(std::string_view name, std::string_view unit, std::function<float()> getter) {
   if (var_count_ >= static_cast<uint8_t>(kMaxVars)) {
     return false;
   }
@@ -48,9 +45,7 @@ bool Device::RegisterVariable(std::string_view name, std::string_view unit,
   return true;
 }
 
-uint16_t Device::variable_count() const {
-  return static_cast<uint16_t>(var_count_);
-}
+uint16_t Device::variable_count() const { return static_cast<uint16_t>(var_count_); }
 
 bool Device::GetVariable(uint16_t index, VariableInfo* info) const {
   if (index >= var_count_) {
@@ -66,16 +61,13 @@ Device::GetBufferInfoResponse Device::HandleGetBufferInfo() const {
   GetBufferInfoResponse resp;
   resp.buffer_bytes = static_cast<uint32_t>(kMaxBufferBytes);
   resp.max_channels = static_cast<uint8_t>(kMaxChannels);
-  const uint8_t ch = (configured_ && capture_config_.num_channels > 0)
-                         ? capture_config_.num_channels
-                         : static_cast<uint8_t>(kMaxChannels);
-  resp.max_samples_per_channel = static_cast<uint16_t>(
-      kMaxBufferBytes / (sizeof(float) * static_cast<std::size_t>(ch)));
+  // max_frames is the buffer depth with 1 channel; the monitor divides by its
+  // planned channel count: max_frames_for_N = max_frames / N.
+  resp.max_frames = static_cast<uint16_t>(kMaxBufferBytes / sizeof(float));
   return resp;
 }
 
-Device::SetupCaptureResponse Device::HandleSetupCapture(
-    const CaptureConfig& config) {
+Device::SetupCaptureResponse Device::HandleSetupCapture(const CaptureConfig& config) {
   SetupCaptureResponse resp;
 
   for (uint8_t i = 0; i < config.num_channels; ++i) {
@@ -86,8 +78,7 @@ Device::SetupCaptureResponse Device::HandleSetupCapture(
     }
   }
 
-  if (!buffer_.Setup(config.num_channels, config.num_samples,
-                     config.pretrigger_samples)) {
+  if (!buffer_.Setup(config.num_channels, config.num_samples, config.pretrigger_samples)) {
     resp.ok = false;
     resp.error_code = ErrorCode::kBufferTooSmall;
     return resp;
@@ -98,14 +89,11 @@ Device::SetupCaptureResponse Device::HandleSetupCapture(
 
   resp.ok = true;
   resp.error_code = ErrorCode::kNone;
-  resp.actual_sample_period_us = (actual_sample_period_us_ > 0.0F)
-                                     ? actual_sample_period_us_
-                                     : config.sample_period_us;
+  resp.actual_sample_period_us = (actual_sample_period_us_ > 0.0F) ? actual_sample_period_us_ : config.sample_period_us;
   return resp;
 }
 
-Device::ArmTriggerResponse Device::HandleArmTrigger(
-    const ArmTriggerConfig& config) {
+Device::ArmTriggerResponse Device::HandleArmTrigger(const ArmTriggerConfig& config) {
   ArmTriggerResponse resp;
 
   if (!config.arm) {
@@ -135,9 +123,7 @@ Device::ArmTriggerResponse Device::HandleArmTrigger(
   tc.hysteresis_band = config.hysteresis_band;
   trigger_.Configure(tc);
 
-  const float current_val = vars_[config.source_variable_id].getter
-                                ? vars_[config.source_variable_id].getter()
-                                : 0.0F;
+  const float current_val = vars_[config.source_variable_id].getter ? vars_[config.source_variable_id].getter() : 0.0F;
   prev_trigger_value_ = current_val;
   trigger_.Arm(current_val);
   buffer_.Arm();
@@ -146,18 +132,13 @@ Device::ArmTriggerResponse Device::HandleArmTrigger(
   return resp;
 }
 
-Device::ReadSamplesResponse Device::HandleReadSamples(
-    uint16_t frame_offset, uint8_t max_frames) const {
+Device::ReadSamplesResponse Device::HandleReadSamples(uint16_t frame_offset, uint8_t max_frames) const {
   ReadSamplesResponse resp;
 
-  const uint8_t clamped = static_cast<uint8_t>(
-      std::min(static_cast<std::size_t>(max_frames), kMaxReadFrames));
+  const uint8_t clamped = static_cast<uint8_t>(std::min(static_cast<std::size_t>(max_frames), kMaxReadFrames));
 
   const uint8_t ch = capture_config_.num_channels;
   resp.num_channels = ch;
-  for (uint8_t i = 0; i < ch && i < kMaxChannels; ++i) {
-    resp.channel_ids[i] = capture_config_.channel_ids[i];
-  }
 
   resp.triggered = buffer_.WasTriggered();
 
@@ -167,16 +148,12 @@ Device::ReadSamplesResponse Device::HandleReadSamples(
     return resp;
   }
 
-  const uint16_t frames_read =
-      buffer_.ReadFrames(frame_offset, clamped, resp.samples.data());
+  const uint16_t frames_read = buffer_.ReadFrames(frame_offset, clamped, resp.samples.data());
 
-  resp.num_samples =
-      static_cast<uint8_t>(static_cast<std::size_t>(frames_read) * ch);
+  resp.num_samples = static_cast<uint8_t>(static_cast<std::size_t>(frames_read) * ch);
 
   const uint16_t total = buffer_.num_samples();
-  resp.end_of_data =
-      (static_cast<uint32_t>(frame_offset) + frames_read >= total) ||
-      buffer_.IsComplete();
+  resp.end_of_data = (static_cast<uint32_t>(frame_offset) + frames_read >= total) || buffer_.IsComplete();
 
   return resp;
 }
@@ -189,9 +166,7 @@ bool Device::Tick() {
   // Evaluate trigger if armed.
   if (trigger_.IsArmed()) {
     const uint8_t src_id = trigger_config_.source_variable_id;
-    const float current_val = (src_id < var_count_ && vars_[src_id].getter)
-                                  ? vars_[src_id].getter()
-                                  : 0.0F;
+    const float current_val = (src_id < var_count_ && vars_[src_id].getter) ? vars_[src_id].getter() : 0.0F;
 
     if (trigger_.Evaluate(prev_trigger_value_, current_val)) {
       buffer_.Trigger();
@@ -204,8 +179,7 @@ bool Device::Tick() {
   const uint8_t ch = capture_config_.num_channels;
   for (uint8_t i = 0; i < ch; ++i) {
     const uint8_t id = capture_config_.channel_ids[i];
-    frame[i] =
-        (id < var_count_ && vars_[id].getter) ? vars_[id].getter() : 0.0F;
+    frame[i] = (id < var_count_ && vars_[id].getter) ? vars_[id].getter() : 0.0F;
   }
   buffer_.WriteFrame(frame);
 

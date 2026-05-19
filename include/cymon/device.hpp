@@ -55,7 +55,9 @@ class Device {
   struct GetBufferInfoResponse {
     uint32_t buffer_bytes = static_cast<uint32_t>(kMaxBufferBytes);
     uint8_t max_channels = static_cast<uint8_t>(kMaxChannels);
-    uint16_t max_samples_per_channel = 0;
+    /// Total frames storable with 1 channel. Divide by actual channel count to
+    /// get per-configuration depth: max_frames_for_N = max_frames / N.
+    uint16_t max_frames = 0;
   };
 
   struct SetupCaptureResponse {
@@ -81,7 +83,6 @@ class Device {
     bool triggered = false;
     bool end_of_data = false;
     uint8_t num_channels = 0;
-    std::array<uint8_t, kMaxChannels> channel_ids = {};
     std::array<float, kMaxReadFrames * kMaxChannels> samples = {};
     uint8_t num_samples = 0;  // float count in samples
   };
@@ -94,8 +95,7 @@ class Device {
 
   /// Register a named variable with a getter. Returns false if at capacity or
   /// name/unit too long.
-  bool RegisterVariable(std::string_view name, std::string_view unit,
-                        std::function<float()> getter);
+  bool RegisterVariable(std::string_view name, std::string_view unit, std::function<float()> getter);
 
   uint16_t variable_count() const;
 
@@ -105,8 +105,7 @@ class Device {
   GetBufferInfoResponse HandleGetBufferInfo() const;
   SetupCaptureResponse HandleSetupCapture(const CaptureConfig& config);
   ArmTriggerResponse HandleArmTrigger(const ArmTriggerConfig& config);
-  ReadSamplesResponse HandleReadSamples(uint16_t frame_offset,
-                                        uint8_t max_frames) const;
+  ReadSamplesResponse HandleReadSamples(uint16_t frame_offset, uint8_t max_frames) const;
 
   /// Call from timer task at configured rate. Returns true when capture is
   /// complete.

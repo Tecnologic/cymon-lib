@@ -33,8 +33,7 @@ TEST(SampleBufferTest, Setup_TooManyChannels_ReturnsFalse) {
 TEST(SampleBufferTest, Setup_TooManySamples_ReturnsFalse) {
   SampleBuffer buf;
   // kCapacityFloats / 2 = 512; 513 should fail.
-  const uint16_t too_many =
-      static_cast<uint16_t>(SampleBuffer::kCapacityFloats / 2 + 1);
+  const uint16_t too_many = static_cast<uint16_t>(SampleBuffer::kCapacityFloats / 2 + 1);
   EXPECT_FALSE(buf.Setup(2, too_many, 0));
 }
 

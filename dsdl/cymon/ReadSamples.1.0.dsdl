@@ -14,11 +14,10 @@
 
 # Paged read-out of captured samples.
 
-uint16 frame_offset
+uint16 frame_offset  # page index: 0 = first page, increment by max_frames to page through capture
 uint8 max_frames
 ---
 bool triggered
 bool end_of_data
 uint8 num_channels
-uint8[<=16] channel_ids
-float32[<=64] samples   # interleaved, num_channels floats per frame
+float32[<=64] samples  # interleaved: num_channels floats per frame

@@ -18,4 +18,5 @@
 uint16 index
 ---
 uint8 id
-cymon.Variable.1.0 variable
+uint8[<=32] name  # UTF-8 variable name; empty = end of list sentinel
+uint8[<=8] unit   # engineering unit string, e.g. "rpm", "A", "V"

@@ -17,4 +17,4 @@
 ---
 uint32 buffer_bytes
 uint8 max_channels
-uint16 max_samples_per_channel
+uint16 max_frames  # total frames storable; divide by your channel count to get per-channel depth

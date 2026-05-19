@@ -63,7 +63,7 @@ TEST(DeviceTest, HandleGetBufferInfo_ReturnsCapacity) {
   const auto resp = dev.HandleGetBufferInfo();
   EXPECT_EQ(resp.buffer_bytes, static_cast<uint32_t>(kMaxBufferBytes));
   EXPECT_EQ(resp.max_channels, static_cast<uint8_t>(kMaxChannels));
-  EXPECT_GT(resp.max_samples_per_channel, 0U);
+  EXPECT_GT(resp.max_frames, 0U);
 }
 
 TEST(DeviceTest, HandleSetupCapture_ValidConfig_ReturnsOk) {

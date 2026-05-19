@@ -20,8 +20,7 @@
 
 namespace cymon {
 
-bool SampleBuffer::Setup(uint8_t num_channels, uint16_t num_samples,
-                         uint16_t pretrigger_samples) {
+bool SampleBuffer::Setup(uint8_t num_channels, uint16_t num_samples, uint16_t pretrigger_samples) {
   if (num_channels == 0) {
     return false;
   }
@@ -76,8 +75,7 @@ bool SampleBuffer::WriteFrame(const float* values) {
     return false;
   }
 
-  const std::size_t offset =
-      static_cast<std::size_t>(write_pos_) * num_channels_;
+  const std::size_t offset = static_cast<std::size_t>(write_pos_) * num_channels_;
   for (uint8_t i = 0; i < num_channels_; ++i) {
     data_[offset + i] = values[i];
   }
@@ -90,8 +88,7 @@ bool SampleBuffer::WriteFrame(const float* values) {
 
   if (triggered_) {
     ++post_trigger_count_;
-    const uint16_t post_needed =
-        static_cast<uint16_t>(num_samples_ - pretrigger_samples_);
+    const uint16_t post_needed = static_cast<uint16_t>(num_samples_ - pretrigger_samples_);
     if (post_trigger_count_ >= post_needed) {
       complete_ = true;
     }
@@ -116,8 +113,7 @@ bool SampleBuffer::Trigger() {
   return true;
 }
 
-uint16_t SampleBuffer::ReadFrames(uint16_t frame_offset, uint8_t max_frames,
-                                  float* out) const {
+uint16_t SampleBuffer::ReadFrames(uint16_t frame_offset, uint8_t max_frames, float* out) const {
   if (!triggered_) {
     return 0;
   }
@@ -133,8 +129,7 @@ uint16_t SampleBuffer::ReadFrames(uint16_t frame_offset, uint8_t max_frames,
 
     if (abs_k < pretrigger_samples_) {
       // Pre-trigger frame: check if enough data was written before trigger.
-      const uint16_t frames_before =
-          static_cast<uint16_t>(pretrigger_samples_ - abs_k);
+      const uint16_t frames_before = static_cast<uint16_t>(pretrigger_samples_ - abs_k);
       if (total_written_ < frames_before) {
         // Not enough pre-trigger data; fill zeros.
         for (uint8_t c = 0; c < num_channels_; ++c) {
@@ -142,27 +137,21 @@ uint16_t SampleBuffer::ReadFrames(uint16_t frame_offset, uint8_t max_frames,
         }
       } else {
         const uint16_t ring_pos =
-            static_cast<uint16_t>((static_cast<uint32_t>(trigger_pos_) +
-                                   capacity_ - pretrigger_samples_ + abs_k) %
-                                  capacity_);
-        const std::size_t src_offset =
-            static_cast<std::size_t>(ring_pos) * num_channels_;
+            static_cast<uint16_t>((static_cast<uint32_t>(trigger_pos_) + capacity_ - pretrigger_samples_ + abs_k) % capacity_);
+        const std::size_t src_offset = static_cast<std::size_t>(ring_pos) * num_channels_;
         for (uint8_t c = 0; c < num_channels_; ++c) {
           dest[c] = data_[src_offset + c];
         }
       }
     } else {
       // Post-trigger frame.
-      const uint16_t post_idx =
-          static_cast<uint16_t>(abs_k - pretrigger_samples_);
+      const uint16_t post_idx = static_cast<uint16_t>(abs_k - pretrigger_samples_);
       if (post_idx >= post_trigger_count_) {
         break;
       }
 
-      const uint16_t ring_pos = static_cast<uint16_t>(
-          (static_cast<uint32_t>(trigger_pos_) + post_idx) % capacity_);
-      const std::size_t src_offset =
-          static_cast<std::size_t>(ring_pos) * num_channels_;
+      const uint16_t ring_pos = static_cast<uint16_t>((static_cast<uint32_t>(trigger_pos_) + post_idx) % capacity_);
+      const std::size_t src_offset = static_cast<std::size_t>(ring_pos) * num_channels_;
       for (uint8_t c = 0; c < num_channels_; ++c) {
         dest[c] = data_[src_offset + c];
       }

@@ -24,9 +24,22 @@
 
 namespace cymon {
 
+/// Total size of the capture buffer in bytes. The buffer holds
+/// kMaxBufferBytes / sizeof(float) float32 slots split across all active
+/// channels. Override with -DCYMON_MAX_BUFFER_BYTES=<bytes>.
 inline constexpr std::size_t kMaxBufferBytes = CYMON_MAX_BUFFER_BYTES;
+
+/// Maximum number of named scalar variables that can be registered on the
+/// device (the full variable registry, e.g. every signal the firmware exposes).
+/// Override with -DCYMON_MAX_VARS=<count>.
 inline constexpr std::size_t kMaxVars = CYMON_MAX_VARS;
+
+/// Maximum number of variables that can be captured *simultaneously* in a
+/// single capture session. Always <= kMaxVars. A monitor selects up to
+/// kMaxChannels variables from the registry for one capture run.
 inline constexpr std::size_t kMaxChannels = 16U;
+
+/// Maximum number of sample frames returned in a single ReadSamples response.
 inline constexpr std::size_t kMaxReadFrames = 4U;
 
 }  // namespace cymon

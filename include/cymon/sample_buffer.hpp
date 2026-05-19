@@ -29,8 +29,7 @@ class SampleBuffer {
 
   /// Configure channels, samples, pretrigger depth.
   /// Returns false if configuration exceeds buffer capacity.
-  bool Setup(uint8_t num_channels, uint16_t num_samples,
-             uint16_t pretrigger_samples);
+  bool Setup(uint8_t num_channels, uint16_t num_samples, uint16_t pretrigger_samples);
 
   void Arm();
   void Disarm();
@@ -45,8 +44,7 @@ class SampleBuffer {
 
   /// Read frames starting at frame_offset (0 = first pre-trigger frame).
   /// Returns number of frames actually placed in out[].
-  uint16_t ReadFrames(uint16_t frame_offset, uint8_t max_frames,
-                      float* out) const;
+  uint16_t ReadFrames(uint16_t frame_offset, uint8_t max_frames, float* out) const;
 
   bool IsComplete() const;
   bool IsArmed() const;
