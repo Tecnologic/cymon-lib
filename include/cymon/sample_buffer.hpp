@@ -63,6 +63,9 @@ class SampleBuffer {
   uint16_t trigger_pos_ = 0;
   uint16_t post_trigger_count_ = 0;
   uint16_t total_written_ = 0;
+  /// Snapshot of total_written_ taken the moment Trigger() fires; used by
+  /// ReadFrames() to determine how many pre-trigger frames are truly available.
+  uint16_t written_before_trigger_ = 0;
   bool configured_ = false;
   bool armed_ = false;
   bool triggered_ = false;

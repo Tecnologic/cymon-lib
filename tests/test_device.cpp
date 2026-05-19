@@ -272,5 +272,38 @@ TEST(DeviceTest, ForceTrigger_TriggersCapture) {
   EXPECT_TRUE(rs.triggered);
 }
 
+TEST(DeviceTest, HandleReadSamples_EndOfData_PagingIsCorrect) {
+  Device dev;
+  ASSERT_TRUE(dev.RegisterVariable("v0", "u", [] { return 1.0F; }));
+
+  Device::CaptureConfig cfg;
+  cfg.channel_ids[0] = 0;
+  cfg.num_channels = 1;
+  cfg.num_samples = 6;
+  cfg.pretrigger_samples = 0;
+  cfg.sample_period_us = 100.0F;
+  ASSERT_TRUE(dev.HandleSetupCapture(cfg).ok);
+
+  Device::ArmTriggerConfig atcfg;
+  atcfg.arm = true;
+  atcfg.source_variable_id = 0;
+  ASSERT_TRUE(dev.HandleArmTrigger(atcfg).ok);
+  dev.ForceTrigger();
+
+  // Fill all 6 post-trigger frames so capture is complete.
+  for (int i = 0; i < 6; ++i) dev.Tick();
+
+  // First page (frames 0-2): NOT end of data.
+  auto rs0 = dev.HandleReadSamples(0, 3);
+  EXPECT_TRUE(rs0.triggered);
+  EXPECT_EQ(rs0.num_samples, 3U);
+  EXPECT_FALSE(rs0.end_of_data);
+
+  // Second page (frames 3-5): IS end of data.
+  auto rs1 = dev.HandleReadSamples(3, 3);
+  EXPECT_EQ(rs1.num_samples, 3U);
+  EXPECT_TRUE(rs1.end_of_data);
+}
+
 }  // namespace
 }  // namespace cymon

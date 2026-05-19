@@ -159,7 +159,7 @@ Device::ReadSamplesResponse Device::HandleReadSamples(uint16_t frame_offset, uin
   resp.num_samples = static_cast<uint8_t>(static_cast<std::size_t>(frames_read) * ch);
 
   const uint16_t total = buffer_.num_samples();
-  resp.end_of_data = (static_cast<uint32_t>(frame_offset) + frames_read >= total) || buffer_.IsComplete();
+  resp.end_of_data = static_cast<uint32_t>(frame_offset) + frames_read >= total;
 
   return resp;
 }

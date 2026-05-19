@@ -146,5 +146,38 @@ TEST(SampleBufferTest, ReadFrames_BeyondWritten_ReturnsAvailable) {
   EXPECT_EQ(n, 3U);
 }
 
+TEST(SampleBufferTest, ReadFrames_EarlyTrigger_PreTriggerZeroFilled) {
+  SampleBuffer buf;
+  // 3 pretrigger + 2 post-trigger = 5 total, 1 channel
+  ASSERT_TRUE(buf.Setup(1, 5, 3));
+  buf.Arm();
+
+  // Write only 1 frame before trigger (need 3 for full pretrigger).
+  float pre = 99.0F;
+  buf.WriteFrame(&pre);
+
+  buf.Trigger();
+
+  // Write 2 post-trigger frames so capture completes.
+  float post = 42.0F;
+  buf.WriteFrame(&post);
+  buf.WriteFrame(&post);
+  EXPECT_TRUE(buf.IsComplete());
+
+  float out[5] = {};
+  const uint16_t n = buf.ReadFrames(0, 5, out);
+  EXPECT_EQ(n, 5U);
+
+  // Frames 0 and 1 need 3 and 2 frames before trigger respectively;
+  // only 1 was written, so both must be zero-filled.
+  EXPECT_FLOAT_EQ(out[0], 0.0F);  // abs_k=0: frames_before=3 > written_before=1 → zero
+  EXPECT_FLOAT_EQ(out[1], 0.0F);  // abs_k=1: frames_before=2 > written_before=1 → zero
+  // abs_k=2: frames_before=1 <= written_before=1 → real data (the one frame written)
+  EXPECT_FLOAT_EQ(out[2], 99.0F);
+  // Post-trigger frames
+  EXPECT_FLOAT_EQ(out[3], 42.0F);
+  EXPECT_FLOAT_EQ(out[4], 42.0F);
+}
+
 }  // namespace
 }  // namespace cymon

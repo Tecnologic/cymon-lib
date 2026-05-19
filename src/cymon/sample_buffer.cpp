@@ -59,6 +59,7 @@ void SampleBuffer::Arm() {
   trigger_pos_ = 0;
   post_trigger_count_ = 0;
   total_written_ = 0;
+  written_before_trigger_ = 0;
   armed_ = true;
   triggered_ = false;
   complete_ = false;
@@ -104,6 +105,7 @@ bool SampleBuffer::Trigger() {
 
   triggered_ = true;
   trigger_pos_ = write_pos_;
+  written_before_trigger_ = total_written_;
   post_trigger_count_ = 0;
 
   if (pretrigger_samples_ >= num_samples_) {
@@ -130,7 +132,7 @@ uint16_t SampleBuffer::ReadFrames(uint16_t frame_offset, uint8_t max_frames, flo
     if (abs_k < pretrigger_samples_) {
       // Pre-trigger frame: check if enough data was written before trigger.
       const uint16_t frames_before = static_cast<uint16_t>(pretrigger_samples_ - abs_k);
-      if (total_written_ < frames_before) {
+      if (written_before_trigger_ < frames_before) {
         // Not enough pre-trigger data; fill zeros.
         for (uint8_t c = 0; c < num_channels_; ++c) {
           dest[c] = 0.0F;
