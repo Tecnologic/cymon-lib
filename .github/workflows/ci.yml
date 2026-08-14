@@ -1,9 +1,9 @@
 name: CI
 on:
   push:
-    branches: [main, "copilot/**"]
+    branches: [main, develop, "copilot/**"]
   pull_request:
-    branches: [main]
+    branches: [main, develop, "copilot/**"]
 
 jobs:
   build-and-test:
@@ -11,15 +11,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install tools
+      - name: Install system dependencies
         run: |
-          sudo apt-get update && sudo apt-get install -y \
-            cmake ninja-build clang clang-format clang-tidy
+          sudo apt-get update -q
+          sudo apt-get install -y \
+            ninja-build clang clang-format clang-tidy
+
+      - name: Install CMake 4.x
+        run: pip install "cmake>=4,<5" --quiet
 
       - name: Configure
         run: |
-          cmake -B build -G Ninja \
+          cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Debug \
+            -DCYMON_BUILD_TESTS=ON \
             -DCMAKE_CXX_COMPILER=clang++ \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
