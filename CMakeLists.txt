@@ -36,7 +36,7 @@ if(CYMON_GENERATE_DSDL)
 endif()
 
 # Tests
-option(CYMON_BUILD_TESTS "Build tests" ON)
+option(CYMON_BUILD_TESTS "Build tests" OFF)
 if(CYMON_BUILD_TESTS)
   enable_testing()
   add_subdirectory(tests)
