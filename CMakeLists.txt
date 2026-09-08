@@ -15,16 +15,13 @@
 cmake_minimum_required(VERSION 4.0.0)
 project(cymon-lib VERSION 0.1.0 LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-
 # Library
 add_library(cymon
   src/cymon/trigger.cpp
   src/cymon/sample_buffer.cpp
   src/cymon/device.cpp
 )
+target_compile_features(cymon PUBLIC cxx_std_23)
 target_include_directories(cymon PUBLIC include)
 target_compile_options(cymon PRIVATE -Wall -Wextra -Wpedantic)
 
