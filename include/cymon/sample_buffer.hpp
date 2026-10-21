@@ -1,75 +1,86 @@
+// SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Tecnologic
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+/// @file sample_buffer.hpp
+/// @brief Ring buffer of sample frames with pre- and post-trigger depth.
 
 #pragma once
+
+#include <array>
 #include <cstddef>
 #include <cstdint>
-
+#include <span>
 #include "cymon/config.hpp"
 
 namespace cymon {
 
-/// Fixed-size circular sample buffer for pre/post-trigger capture.
-/// Total storage is kMaxBufferBytes bytes = kMaxBufferBytes/4 float32 slots.
+/**
+ * @brief Fixed-size ring of frames (one float per channel) for pre/post-trigger capture.
+ *
+ * Before the trigger the ring runs continuously; after Trigger() it records
+ * num_samples - pretrigger_samples further frames and is complete. Frames are
+ * read back in time order, frame pretrigger_samples being the trigger sample.
+ * Allocation-free; WriteFrame() and Trigger() are safe in an interrupt.
+ */
 class SampleBuffer {
  public:
-  static constexpr std::size_t kCapacityBytes = kMaxBufferBytes;
-  static constexpr std::size_t kCapacityFloats = kCapacityBytes / sizeof(float);
+  static constexpr std::size_t kCapacityFloats = kMaxBufferBytes / sizeof(float);
 
-  /// Configure channels, samples, pretrigger depth.
-  /// Returns false if configuration exceeds buffer capacity.
-  bool Setup(uint8_t num_channels, uint16_t num_samples, uint16_t pretrigger_samples);
+  /**
+   * @brief Sets the frame layout and disarms the buffer.
+   * @return false if the layout is empty or does not fit (the old one stays).
+   */
+  [[nodiscard]] bool Setup(uint8_t num_channels, uint16_t num_samples, uint16_t pretrigger_samples) noexcept;
 
-  void Arm();
-  void Disarm();
+  /// Clears the ring and starts recording (requires a successful Setup()).
+  void Arm() noexcept;
 
-  /// Write one frame (num_channels values). Returns false if not armed or
-  /// complete.
-  bool WriteFrame(const float* values);
+  void Disarm() noexcept;
 
-  /// Signal trigger. trigger_pos_ = current write_pos_. Returns false if not
-  /// armed.
-  bool Trigger();
+  /// Appends one frame of NumChannels() values. Returns false if not armed or complete.
+  bool WriteFrame(std::span<const float> values) noexcept;
 
-  /// Read frames starting at frame_offset (0 = first pre-trigger frame).
-  /// Returns number of frames actually placed in out[].
-  uint16_t ReadFrames(uint16_t frame_offset, uint8_t max_frames, float* out) const;
+  /// Marks the next written frame as the trigger sample. Returns false if not armed or already triggered.
+  bool Trigger() noexcept;
 
-  bool IsComplete() const;
-  bool IsArmed() const;
-  bool WasTriggered() const;
-  uint8_t num_channels() const;
-  uint16_t num_samples() const;
-  uint16_t capacity_frames() const;
+  /**
+   * @brief Copies frames in time order into @p out (interleaved, NumChannels() floats per frame).
+   * @param frame_offset First frame (0 = oldest pre-trigger frame).
+   * @param max_frames Frames to copy at most; also limited by the size of @p out.
+   * @return Number of frames copied. Pre-trigger frames that were never written read as 0.
+   */
+  [[nodiscard]] uint16_t ReadFrames(uint16_t frame_offset,
+                                    uint16_t max_frames,
+                                    std::span<float> out) const noexcept;
+
+  [[nodiscard]] bool IsComplete() const noexcept;
+  [[nodiscard]] bool IsArmed() const noexcept;
+  [[nodiscard]] bool WasTriggered() const noexcept;
+  /// True once the pre-trigger part of the ring holds recorded frames only.
+  [[nodiscard]] bool PretriggerFilled() const noexcept;
+  [[nodiscard]] uint8_t NumChannels() const noexcept;
+  [[nodiscard]] uint16_t NumSamples() const noexcept;
+  [[nodiscard]] uint16_t PretriggerSamples() const noexcept;
+  /// Frames the ring holds with the current channel count.
+  [[nodiscard]] uint16_t CapacityFrames() const noexcept;
 
  private:
-  float data_[kCapacityFloats] = {};
-  uint8_t num_channels_ = 0;
-  uint16_t num_samples_ = 0;
-  uint16_t pretrigger_samples_ = 0;
-  uint16_t capacity_ = 0;
-  uint16_t write_pos_ = 0;
-  uint16_t trigger_pos_ = 0;
-  uint16_t post_trigger_count_ = 0;
-  uint16_t total_written_ = 0;
-  /// Snapshot of total_written_ taken the moment Trigger() fires; used by
-  /// ReadFrames() to determine how many pre-trigger frames are truly available.
-  uint16_t written_before_trigger_ = 0;
-  bool configured_ = false;
-  bool armed_ = false;
-  bool triggered_ = false;
-  bool complete_ = false;
+  void CopyFrame(uint16_t ring_pos, std::span<float> dest) const noexcept;
+
+  std::array<float, kCapacityFloats> data_{};
+  uint8_t num_channels_{0U};
+  uint16_t num_samples_{0U};
+  uint16_t pretrigger_samples_{0U};
+  uint16_t capacity_{0U};
+  uint16_t write_pos_{0U};
+  uint16_t trigger_pos_{0U};
+  uint16_t post_trigger_count_{0U};
+  /// Frames written since Arm(), saturating at the pre-trigger depth.
+  uint16_t written_before_trigger_{0U};
+  bool configured_{false};
+  bool armed_{false};
+  bool triggered_{false};
+  bool complete_{false};
 };
 
 }  // namespace cymon

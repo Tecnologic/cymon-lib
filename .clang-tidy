@@ -1,29 +1,57 @@
----
+# SPDX-License-Identifier: Apache-2.0
 Checks: >
-  bugprone-*,
-  -bugprone-easily-swappable-parameters,
-  -bugprone-exception-escape,
-  google-build-explicit-make-pairs,
-  google-build-namespaces,
-  google-build-using-namespace,
-  google-explicit-constructor,
-  google-global-names-in-headers,
-  google-readability-braces-around-statements,
-  google-readability-casting,
-  google-readability-namespace-comments,
-  -google-readability-todo,
-  google-runtime-int,
-  google-runtime-operator,
-  modernize-use-nullptr,
-  modernize-use-override,
-  modernize-use-emplace,
-  performance-for-range-copy,
-  performance-unnecessary-copy-initialization,
-  readability-braces-around-statements,
-  readability-const-return-type,
-  readability-container-size-empty,
-  readability-delete-null-pointer,
-  readability-else-after-return
+  clang-diagnostic-*,
+  clang-analyzer-*,
+  cppcoreguidelines-*,
+  modernize-*,
+  performance-*,
+  readability-*,
+  -modernize-use-trailing-return-type,
+  -readability-magic-numbers,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-pro-bounds-pointer-arithmetic,
+  -cppcoreguidelines-pro-type-reinterpret-cast,
+  -cppcoreguidelines-pro-type-union-access,
+  -cppcoreguidelines-pro-bounds-constant-array-index
 
-WarningsAsErrors: ''
-HeaderFilterRegex: 'include/cymon/.*'
+# Indices into fixed-size arrays are loop counters bounded by the array size
+# constant. The suggested replacement (gsl::at or .at()) adds an abort path to
+# the zero-latency hot path, so the check is off.
+
+# The checks and naming rules of UNIMOC, so the library is clean when UNIMOC
+# builds it. The public headers are checked with the sources.
+HeaderFilterRegex: '.*/include/cymon/[^/]+\.hpp$'
+
+WarningsAsErrors: ""
+
+CheckOptions:
+  # Phase (a, b, c), axis (d, q), per-phase names (ia, da, ...) and the time
+  # step (dt) are the vocabulary of the motor-control code.
+  - key: readability-identifier-length.IgnoredVariableNames
+    value: "^(a|b|c|d|q|dt|ia|ib|ic|da|db|dc)$"
+  - key: readability-identifier-length.IgnoredParameterNames
+    value: "^(a|b|c|d|q|dt|ia|ib|ic|da|db|dc)$"
+  # Zephyr macros (LOG_*, K_USEC, zassert) would dominate the count.
+  - key: readability-function-cognitive-complexity.IgnoreMacros
+    value: true
+  - key: readability-identifier-naming.ClassCase
+    value: CamelCase
+  - key: readability-identifier-naming.FunctionCase
+    value: CamelCase
+  - key: readability-identifier-naming.VariableCase
+    value: lower_case
+  - key: readability-identifier-naming.ConstantCase
+    value: CamelCase
+  - key: readability-identifier-naming.ConstantPrefix
+    value: "k"
+  - key: readability-identifier-naming.MemberCase
+    value: lower_case
+  - key: readability-identifier-naming.MemberSuffix
+    value: "_"
+  - key: readability-identifier-naming.PublicMemberSuffix
+    value: ""
+  # Parameters are variables (snake_case), also when they are const.
+  - key: readability-identifier-naming.ParameterCase
+    value: lower_case
+  - key: readability-identifier-naming.ConstantParameterCase
+    value: lower_case

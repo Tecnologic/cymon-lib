@@ -1,18 +1,15 @@
+// SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Tecnologic
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+/// @file config.hpp
+/// @brief Compile-time limits of cymon-lib.
+///
+/// Every limit can be overridden with a preprocessor define (CMake cache
+/// variables of the same name, see the README), before any cymon header is
+/// included. All storage is static: the limits size the Device object.
 
 #pragma once
+
 #include <cstddef>
 
 #ifndef CYMON_MAX_BUFFER_BYTES
@@ -27,25 +24,33 @@
 
 namespace cymon {
 
-/// Total size of the capture buffer in bytes. The buffer holds
-/// kMaxBufferBytes / sizeof(float) float32 slots split across all active
-/// channels. Override with -DCYMON_MAX_BUFFER_BYTES=<bytes>.
+/// Size of the capture buffer in bytes, split across the channels of one
+/// capture (kMaxBufferBytes / sizeof(float) samples in total).
 inline constexpr std::size_t kMaxBufferBytes = CYMON_MAX_BUFFER_BYTES;
 
-/// Maximum number of named scalar variables that can be registered on the
-/// device (the full variable registry, e.g. every signal the firmware exposes).
-/// Hard upper bound is 255 (IDs are uint8). Override with -DCYMON_MAX_VARS=<count>.
+/// Number of variables the registry holds (every signal the firmware offers).
 inline constexpr std::size_t kMaxVars = CYMON_MAX_VARS;
-static_assert(kMaxVars <= 255U, "CYMON_MAX_VARS must not exceed 255 (variable IDs are uint8)");
 
-/// Maximum number of variables that can be captured *simultaneously* in a
-/// single capture session. Always <= kMaxVars. A monitor selects up to
-/// kMaxChannels variables from the registry for one capture run.
-/// Hard upper bound is 255. Override with -DCYMON_MAX_CHANNELS=<count>.
+/// Number of variables one capture records at the same time (<= kMaxVars).
 inline constexpr std::size_t kMaxChannels = CYMON_MAX_CHANNELS;
-static_assert(kMaxChannels <= 255U, "CYMON_MAX_CHANNELS must not exceed 255 (channel IDs are uint8)");
 
-/// Maximum number of sample frames returned in a single ReadSamples response.
-inline constexpr std::size_t kMaxReadFrames = 4U;
+/// Longest variable name in bytes (cymon.GetVariableList.0.1).
+inline constexpr std::size_t kMaxNameLength = 32U;
+
+/// Longest unit string in bytes (cymon.GetVariableList.0.1).
+inline constexpr std::size_t kMaxUnitLength = 8U;
+
+/// Samples (not frames) one ReadSamples response carries (cymon.ReadSamples.0.1).
+inline constexpr std::size_t kMaxReadSamples = 64U;
+
+/// Channel IDs one SetupCapture request can carry (cymon.SetupCapture.0.1).
+inline constexpr std::size_t kMaxRequestChannels = 16U;
+
+static_assert(kMaxVars > 0U && kMaxVars <= 255U, "CYMON_MAX_VARS must be 1..255 (variable IDs are uint8)");
+static_assert(kMaxChannels > 0U && kMaxChannels <= kMaxVars, "CYMON_MAX_CHANNELS must be 1..CYMON_MAX_VARS");
+static_assert(kMaxChannels <= kMaxRequestChannels, "CYMON_MAX_CHANNELS exceeds cymon.SetupCapture.0.1");
+static_assert(kMaxChannels <= kMaxReadSamples, "one frame must fit into a ReadSamples response");
+static_assert(kMaxBufferBytes >= sizeof(float) * kMaxChannels, "CYMON_MAX_BUFFER_BYTES too small");
+static_assert(kMaxBufferBytes / sizeof(float) <= 65535U, "frame indices are uint16");
 
 }  // namespace cymon

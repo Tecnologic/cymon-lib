@@ -1,0 +1,14 @@
+
+# Arms the configured capture (restarting it if armed) or disarms it.
+# Disarming discards a complete capture.
+# Port: register uavcan.srv.cymon_arm.id (no fixed port-ID).
+
+bool arm
+uint8 source_variable_id    # ignored for IMMEDIATE
+cymon.TriggerMode.0.1 mode
+float32 level
+float32 hysteresis_band     # HYSTERESIS only
+@extent 64 * 8
+---
+cymon.Error.0.1 result
+@extent 64 * 8

@@ -1,0 +1,11 @@
+
+# State of the capture of a node (cymon::CaptureState).
+
+uint8 IDLE       = 0  # No capture configured.
+uint8 CONFIGURED = 1  # Configured, not armed (also after a disarm).
+uint8 ARMED      = 2  # Recording the pre-trigger part, waiting for the trigger.
+uint8 TRIGGERED  = 3  # Triggered, recording the post-trigger part.
+uint8 COMPLETE   = 4  # Complete; ReadSamples returns the samples.
+
+uint8 value
+@sealed

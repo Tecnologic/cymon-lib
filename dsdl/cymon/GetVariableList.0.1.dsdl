@@ -1,0 +1,11 @@
+
+# Iterates the variable registry of a node, like uavcan.register.List.
+# The variable ID is the index; an empty name ends the list.
+# Port: register uavcan.srv.cymon_variables.id (no fixed port-ID).
+
+uint16 index
+@extent 64 * 8
+---
+uint8[<=32] name  # UTF-8; empty past the last variable
+uint8[<=8] unit   # engineering unit, e.g. "A", "rad/s", "V"; may be empty
+@extent 128 * 8

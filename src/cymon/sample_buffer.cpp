@@ -1,173 +1,132 @@
+// SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Tecnologic
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+/// @file sample_buffer.cpp
+/// @brief Ring buffer of sample frames with pre- and post-trigger depth.
 
 #include "cymon/sample_buffer.hpp"
-
 #include <algorithm>
-#include <cstring>
-#include <limits>
 
 namespace cymon {
 
-bool SampleBuffer::Setup(uint8_t num_channels, uint16_t num_samples, uint16_t pretrigger_samples) {
-  if (num_channels == 0) {
+bool SampleBuffer::Setup(uint8_t num_channels, uint16_t num_samples, uint16_t pretrigger_samples) noexcept {
+  if (num_channels == 0U || num_channels > kMaxChannels) {
     return false;
   }
-  if (num_channels > kMaxChannels) {
-    return false;
-  }
-  if (pretrigger_samples > num_samples) {
-    return false;
-  }
-
-  const uint16_t cap = static_cast<uint16_t>(kCapacityFloats / num_channels);
-  if (num_samples > cap) {
-    return false;
-  }
-  if (num_samples == 0) {
+  const auto kCapacity = static_cast<uint16_t>(kCapacityFloats / num_channels);
+  if (num_samples == 0U || num_samples > kCapacity || pretrigger_samples >= num_samples) {
     return false;
   }
 
   num_channels_ = num_channels;
   num_samples_ = num_samples;
   pretrigger_samples_ = pretrigger_samples;
-  capacity_ = cap;
+  capacity_ = kCapacity;
   configured_ = true;
-  armed_ = false;
-  triggered_ = false;
-  complete_ = false;
-  write_pos_ = 0;
-  trigger_pos_ = 0;
-  post_trigger_count_ = 0;
-  total_written_ = 0;
+  Disarm();
   return true;
 }
 
-void SampleBuffer::Arm() {
-  write_pos_ = 0;
-  trigger_pos_ = 0;
-  post_trigger_count_ = 0;
-  total_written_ = 0;
-  written_before_trigger_ = 0;
-  armed_ = true;
+void SampleBuffer::Arm() noexcept {
+  if (!configured_) {
+    return;
+  }
+  write_pos_ = 0U;
+  trigger_pos_ = 0U;
+  post_trigger_count_ = 0U;
+  written_before_trigger_ = 0U;
   triggered_ = false;
   complete_ = false;
+  armed_ = true;
 }
 
-void SampleBuffer::Disarm() {
+void SampleBuffer::Disarm() noexcept {
   armed_ = false;
   triggered_ = false;
   complete_ = false;
 }
 
-bool SampleBuffer::WriteFrame(const float* values) {
-  if (!armed_ || complete_) {
+bool SampleBuffer::WriteFrame(std::span<const float> values) noexcept {
+  if (!armed_ || complete_ || values.size() < num_channels_) {
     return false;
   }
 
-  const std::size_t offset = static_cast<std::size_t>(write_pos_) * num_channels_;
-  for (uint8_t i = 0; i < num_channels_; ++i) {
-    data_[offset + i] = values[i];
-  }
-
+  const std::size_t kOffset = static_cast<std::size_t>(write_pos_) * num_channels_;
+  std::copy_n(values.begin(), num_channels_, data_.begin() + static_cast<std::ptrdiff_t>(kOffset));
   write_pos_ = static_cast<uint16_t>((write_pos_ + 1U) % capacity_);
-
-  if (total_written_ < std::numeric_limits<uint16_t>::max()) {
-    ++total_written_;
-  }
 
   if (triggered_) {
     ++post_trigger_count_;
-    const uint16_t post_needed = static_cast<uint16_t>(num_samples_ - pretrigger_samples_);
-    if (post_trigger_count_ >= post_needed) {
+    if (post_trigger_count_ >= num_samples_ - pretrigger_samples_) {
       complete_ = true;
     }
+  } else if (written_before_trigger_ < pretrigger_samples_) {
+    ++written_before_trigger_;
   }
-
   return true;
 }
 
-bool SampleBuffer::Trigger() {
+bool SampleBuffer::Trigger() noexcept {
   if (!armed_ || triggered_) {
     return false;
   }
-
   triggered_ = true;
   trigger_pos_ = write_pos_;
-  written_before_trigger_ = total_written_;
-  post_trigger_count_ = 0;
-
-  if (pretrigger_samples_ >= num_samples_) {
-    complete_ = true;
-  }
-
+  post_trigger_count_ = 0U;
   return true;
 }
 
-uint16_t SampleBuffer::ReadFrames(uint16_t frame_offset, uint8_t max_frames, float* out) const {
-  if (!triggered_) {
-    return 0;
-  }
-
-  uint16_t n = 0;
-  for (uint16_t i = 0; i < max_frames; ++i) {
-    const uint16_t abs_k = static_cast<uint16_t>(frame_offset + i);
-    if (abs_k >= num_samples_) {
-      break;
-    }
-
-    float* dest = out + static_cast<std::size_t>(n) * num_channels_;
-
-    if (abs_k < pretrigger_samples_) {
-      // Pre-trigger frame: check if enough data was written before trigger.
-      const uint16_t frames_before = static_cast<uint16_t>(pretrigger_samples_ - abs_k);
-      if (written_before_trigger_ < frames_before) {
-        // Not enough pre-trigger data; fill zeros.
-        for (uint8_t c = 0; c < num_channels_; ++c) {
-          dest[c] = 0.0F;
-        }
-      } else {
-        const uint16_t ring_pos =
-            static_cast<uint16_t>((static_cast<uint32_t>(trigger_pos_) + capacity_ - pretrigger_samples_ + abs_k) % capacity_);
-        const std::size_t src_offset = static_cast<std::size_t>(ring_pos) * num_channels_;
-        for (uint8_t c = 0; c < num_channels_; ++c) {
-          dest[c] = data_[src_offset + c];
-        }
-      }
-    } else {
-      // Post-trigger frame.
-      const uint16_t post_idx = static_cast<uint16_t>(abs_k - pretrigger_samples_);
-      if (post_idx >= post_trigger_count_) {
-        break;
-      }
-
-      const uint16_t ring_pos = static_cast<uint16_t>((static_cast<uint32_t>(trigger_pos_) + post_idx) % capacity_);
-      const std::size_t src_offset = static_cast<std::size_t>(ring_pos) * num_channels_;
-      for (uint8_t c = 0; c < num_channels_; ++c) {
-        dest[c] = data_[src_offset + c];
-      }
-    }
-    ++n;
-  }
-  return n;
+void SampleBuffer::CopyFrame(uint16_t ring_pos, std::span<float> dest) const noexcept {
+  const std::size_t kOffset = static_cast<std::size_t>(ring_pos) * num_channels_;
+  std::copy_n(data_.begin() + static_cast<std::ptrdiff_t>(kOffset), num_channels_, dest.begin());
 }
 
-bool SampleBuffer::IsComplete() const { return complete_; }
-bool SampleBuffer::IsArmed() const { return armed_; }
-bool SampleBuffer::WasTriggered() const { return triggered_; }
-uint8_t SampleBuffer::num_channels() const { return num_channels_; }
-uint16_t SampleBuffer::num_samples() const { return num_samples_; }
-uint16_t SampleBuffer::capacity_frames() const { return capacity_; }
+uint16_t SampleBuffer::ReadFrames(uint16_t frame_offset,
+                                  uint16_t max_frames,
+                                  std::span<float> out) const noexcept {
+  if (!triggered_ || num_channels_ == 0U) {
+    return 0U;
+  }
+  const std::size_t kFit = out.size() / num_channels_;
+  const auto kLimit = static_cast<uint16_t>(std::min<std::size_t>(max_frames, kFit));
+
+  uint16_t copied = 0U;
+  for (; copied < kLimit; ++copied) {
+    const auto kFrame = static_cast<uint32_t>(frame_offset) + copied;
+    if (kFrame >= num_samples_) {
+      break;
+    }
+    const std::span<float> kDest =
+        out.subspan(static_cast<std::size_t>(copied) * num_channels_, num_channels_);
+
+    if (kFrame < pretrigger_samples_) {
+      // The ring holds written_before_trigger_ frames directly before the trigger sample.
+      const uint32_t kAge = pretrigger_samples_ - kFrame;
+      if (kAge > written_before_trigger_) {
+        std::fill(kDest.begin(), kDest.end(), 0.0F);
+      } else {
+        CopyFrame(static_cast<uint16_t>((trigger_pos_ + capacity_ - kAge) % capacity_), kDest);
+      }
+    } else {
+      const uint32_t kPostIndex = kFrame - pretrigger_samples_;
+      if (kPostIndex >= post_trigger_count_) {
+        break;
+      }
+      CopyFrame(static_cast<uint16_t>((trigger_pos_ + kPostIndex) % capacity_), kDest);
+    }
+  }
+  return copied;
+}
+
+bool SampleBuffer::IsComplete() const noexcept { return complete_; }
+bool SampleBuffer::IsArmed() const noexcept { return armed_; }
+bool SampleBuffer::WasTriggered() const noexcept { return triggered_; }
+bool SampleBuffer::PretriggerFilled() const noexcept {
+  return written_before_trigger_ >= pretrigger_samples_;
+}
+uint8_t SampleBuffer::NumChannels() const noexcept { return num_channels_; }
+uint16_t SampleBuffer::NumSamples() const noexcept { return num_samples_; }
+uint16_t SampleBuffer::PretriggerSamples() const noexcept { return pretrigger_samples_; }
+uint16_t SampleBuffer::CapacityFrames() const noexcept { return capacity_; }
 
 }  // namespace cymon

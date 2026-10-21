@@ -1,0 +1,9 @@
+
+# Published by a node when its capture triggers. Other nodes can subscribe
+# to it to trigger their captures at the same moment (cymon::Device::RequestTrigger).
+# Port: registers uavcan.pub.cymon_trigger.id / uavcan.sub.cymon_trigger.id.
+
+uint8 source_variable_id
+cymon.TriggerMode.0.1 mode
+float32 trigger_value
+@extent 32 * 8

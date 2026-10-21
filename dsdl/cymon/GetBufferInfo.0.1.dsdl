@@ -1,0 +1,12 @@
+
+# Capture limits of a node.
+# Port: register uavcan.srv.cymon_buffer_info.id (no fixed port-ID).
+
+@extent 64 * 8
+---
+uint32 buffer_bytes      # capture buffer size
+uint8 max_channels       # channels of one capture
+uint16 max_frames        # frames with one channel; with N channels max_frames / N
+uint8 max_read_samples   # samples one ReadSamples response carries
+float32 tick_period_us   # period of the sampling tick; sample periods are multiples of it (0: unknown)
+@extent 64 * 8

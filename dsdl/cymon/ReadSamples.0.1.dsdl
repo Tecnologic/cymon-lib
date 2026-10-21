@@ -1,0 +1,17 @@
+
+# Capture status and paged read-out of a complete capture. Poll with
+# max_frames = 0 for the status; once COMPLETE, page with frame_offset.
+# Port: register uavcan.srv.cymon_read.id (no fixed port-ID).
+
+uint16 frame_offset         # first frame; frame pretrigger_samples is the trigger sample
+uint8 max_frames            # limited by max_read_samples / num_channels
+@extent 64 * 8
+---
+cymon.CaptureState.0.1 state
+uint8 num_channels
+uint16 num_samples
+uint16 pretrigger_samples
+float32 sample_period_us
+bool end_of_data            # the response holds the last frame
+float32[<=64] samples       # COMPLETE only: frames in time order, num_channels values per frame
+@extent 384 * 8

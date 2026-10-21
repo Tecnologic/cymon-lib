@@ -1,0 +1,12 @@
+
+# Result of a cymon request (cymon::ErrorCode).
+
+uint8 NONE              = 0
+uint8 BAD_CHANNEL_ID    = 1  # A channel or the trigger source is no registered variable.
+uint8 BUFFER_TOO_SMALL  = 2  # num_samples does not fit the buffer with this channel count.
+uint8 NOT_CONFIGURED    = 3  # ArmTrigger before a successful SetupCapture.
+uint8 ALREADY_CAPTURING = 5  # SetupCapture while armed; disarm first.
+uint8 BAD_CONFIG        = 9  # No or too many channels, pretrigger >= num_samples, bad trigger mode.
+
+uint8 value
+@sealed

@@ -1,0 +1,13 @@
+
+# Configures the next capture. Refused while armed (disarm with ArmTrigger first).
+# Port: register uavcan.srv.cymon_setup.id (no fixed port-ID).
+
+uint8[<=16] channel_ids     # variable IDs, one per channel, at most GetBufferInfo.max_channels
+float32 sample_period_us    # rounded to a multiple of the tick period, never below it
+uint16 num_samples          # frames of the capture, pre-trigger part included
+uint16 pretrigger_samples   # frames before the trigger sample, < num_samples
+@extent 64 * 8
+---
+cymon.Error.0.1 result
+float32 actual_sample_period_us
+@extent 64 * 8
