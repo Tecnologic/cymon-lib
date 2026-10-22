@@ -1,45 +1,48 @@
 name: CI
 on:
-  push:
-    branches: [main, develop, "copilot/**"]
+  # Pull requests only; a push to a branch runs nothing.
   pull_request:
-    branches: [main, develop, "copilot/**"]
+  workflow_dispatch:
 
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        compiler: [g++, clang++]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
 
-      - name: Install system dependencies
+      - name: Install dependencies
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y \
-            ninja-build clang clang-format clang-tidy
-
-      - name: Install CMake 4.x
-        run: pip install "cmake>=4,<5" --quiet
+          sudo apt-get install -y ninja-build clang clang-tidy
 
       - name: Configure
         run: |
-          cmake -S . -B build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Debug \
-            -DCYMON_BUILD_TESTS=ON \
-            -DCMAKE_CXX_COMPILER=clang++ \
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_CXX_COMPILER=${{ matrix.compiler }} -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
-      - name: Build
+      - name: Build (warnings are errors)
         run: cmake --build build
 
       - name: Test
         run: ctest --test-dir build --output-on-failure
 
-      - name: clang-format check
-        run: |
-          find include src tests -name "*.hpp" -o -name "*.cpp" | \
-            xargs clang-format --dry-run --Werror
-
       - name: clang-tidy
-        run: |
-          find src -name "*.cpp" | \
-            xargs clang-tidy -p build/
+        if: matrix.compiler == 'clang++'
+        run: clang-tidy -p build --warnings-as-errors='*' src/cymon/*.cpp
+
+  format-and-dsdl:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install tools
+        run: pip install clang-format==22.1.1 "nunavut>=2.3,<3"
+      - name: clang-format
+        run: git ls-files '*.hpp' '*.cpp' | xargs clang-format --dry-run --Werror
+      - name: DSDL and generated C serialization
+        run: scripts/check_dsdl.sh

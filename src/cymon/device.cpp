@@ -1,202 +1,196 @@
+// SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Tecnologic
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+/// @file device.cpp
+/// @brief Device side of the cymon trace protocol: variable registry, capture and trigger.
 
 #include "cymon/device.hpp"
-
 #include <algorithm>
-#include <cstring>
+#include <limits>
 
 namespace cymon {
 
-Device::Device() = default;
+namespace {
 
-void Device::set_actual_sample_period_us(float us) { actual_sample_period_us_ = us; }
+constexpr uint32_t kMaxDecimation = std::numeric_limits<uint16_t>::max();
 
-bool Device::RegisterVariable(std::string_view name, std::string_view unit, std::function<float()> getter) {
-  if (var_count_ >= kMaxVars) {
+/// Ticks per sample for @p requested_us, rounded to nearest, at least 1.
+uint16_t Decimation(float requested_us, float tick_us) noexcept {
+  if (!(tick_us > 0.0F) || !(requested_us > tick_us)) {
+    return 1U;
+  }
+  const float kTicks = (requested_us / tick_us) + 0.5F;
+  if (kTicks >= static_cast<float>(kMaxDecimation)) {
+    return static_cast<uint16_t>(kMaxDecimation);
+  }
+  return static_cast<uint16_t>(kTicks);
+}
+
+bool IsCapturing(CaptureState state) noexcept {
+  return state == CaptureState::kArmed || state == CaptureState::kTriggered;
+}
+
+}  // namespace
+
+bool Device::RegisterVariable(std::string_view name, std::string_view unit, const float* source) noexcept {
+  if (var_count_ >= kMaxVars || name.empty() || name.size() > kMaxNameLength ||
+      unit.size() > kMaxUnitLength || source == nullptr) {
     return false;
   }
-  if (name.size() > 32U) {
-    return false;
-  }
-  if (unit.size() > 8U) {
-    return false;
-  }
-
-  VarEntry& entry = vars_[var_count_];
-  std::memset(entry.name, 0, sizeof(entry.name));
-  std::memset(entry.unit, 0, sizeof(entry.unit));
-  std::memcpy(entry.name, name.data(), name.size());
-  std::memcpy(entry.unit, unit.data(), unit.size());
-  entry.getter = std::move(getter);
-  entry.active = true;
+  vars_[var_count_] = Variable{.name = name, .unit = unit, .source = source};
   ++var_count_;
   return true;
 }
 
-uint16_t Device::variable_count() const { return static_cast<uint16_t>(var_count_); }
+void Device::SetTickPeriod(float tick_period_us) noexcept { tick_period_us_ = tick_period_us; }
 
-bool Device::GetVariable(uint16_t index, VariableInfo* info) const {
+uint8_t Device::VariableCount() const noexcept { return var_count_; }
+
+Device::VariableInfo Device::GetVariable(uint16_t index) const noexcept {
   if (index >= var_count_) {
-    return false;
+    return {};
   }
-  info->id = static_cast<uint8_t>(index);
-  std::memcpy(info->name, vars_[index].name, sizeof(info->name));
-  std::memcpy(info->unit, vars_[index].unit, sizeof(info->unit));
-  return true;
+  return {.name = vars_[index].name, .unit = vars_[index].unit};
 }
 
-Device::GetBufferInfoResponse Device::HandleGetBufferInfo() const {
-  GetBufferInfoResponse resp;
-  resp.buffer_bytes = static_cast<uint32_t>(kMaxBufferBytes);
-  resp.max_channels = static_cast<uint8_t>(kMaxChannels);
-  // max_frames is the buffer depth with 1 channel; the monitor divides by its
-  // planned channel count: max_frames_for_N = max_frames / N.
-  resp.max_frames = static_cast<uint16_t>(kMaxBufferBytes / sizeof(float));
-  return resp;
+Device::BufferInfo Device::HandleGetBufferInfo() const noexcept {
+  return {.buffer_bytes = static_cast<uint32_t>(kMaxBufferBytes),
+          .max_channels = static_cast<uint8_t>(kMaxChannels),
+          .max_frames = static_cast<uint16_t>(SampleBuffer::kCapacityFloats),
+          .max_read_samples = static_cast<uint8_t>(kMaxReadSamples),
+          .tick_period_us = tick_period_us_};
 }
 
-Device::SetupCaptureResponse Device::HandleSetupCapture(const CaptureConfig& config) {
-  SetupCaptureResponse resp;
-
-  if (config.num_channels == 0 || config.num_channels > static_cast<uint8_t>(kMaxChannels)) {
-    resp.ok = false;
-    resp.error_code = ErrorCode::kBadConfig;
-    return resp;
+Device::SetupCaptureResult Device::HandleSetupCapture(const CaptureConfig& config) noexcept {
+  if (IsCapturing(state_.load(std::memory_order_acquire))) {
+    return {.error = ErrorCode::kAlreadyCapturing};
   }
-
-  for (uint8_t i = 0; i < config.num_channels; ++i) {
-    if (config.channel_ids[i] >= var_count_) {
-      resp.ok = false;
-      resp.error_code = ErrorCode::kBadChannelId;
-      return resp;
-    }
+  if (config.num_channels == 0U || config.num_channels > kMaxChannels) {
+    return {.error = ErrorCode::kBadConfig};
   }
-
+  const auto kChannels = std::span(config.channel_ids).first(config.num_channels);
+  if (std::any_of(kChannels.begin(), kChannels.end(), [this](uint8_t variable_id) {
+        return variable_id >= var_count_;
+      })) {
+    return {.error = ErrorCode::kBadChannelId};
+  }
+  if (config.num_samples == 0U || config.pretrigger_samples >= config.num_samples) {
+    return {.error = ErrorCode::kBadConfig};
+  }
   if (!buffer_.Setup(config.num_channels, config.num_samples, config.pretrigger_samples)) {
-    resp.ok = false;
-    resp.error_code = ErrorCode::kBufferTooSmall;
-    return resp;
+    return {.error = ErrorCode::kBufferTooSmall};
   }
 
   capture_config_ = config;
-  configured_ = true;
-
-  resp.ok = true;
-  resp.error_code = ErrorCode::kNone;
-  resp.actual_sample_period_us = (actual_sample_period_us_ > 0.0F) ? actual_sample_period_us_ : config.sample_period_us;
-  return resp;
+  decimation_ = Decimation(config.sample_period_us, tick_period_us_);
+  actual_sample_period_us_ =
+      (tick_period_us_ > 0.0F) ? static_cast<float>(decimation_) * tick_period_us_ : config.sample_period_us;
+  state_.store(CaptureState::kConfigured, std::memory_order_release);
+  return {.error = ErrorCode::kNone, .actual_sample_period_us = actual_sample_period_us_};
 }
 
-Device::ArmTriggerResponse Device::HandleArmTrigger(const ArmTriggerConfig& config) {
-  ArmTriggerResponse resp;
-
+ErrorCode Device::HandleArmTrigger(const ArmTriggerConfig& config) noexcept {
+  const CaptureState kState = state_.load(std::memory_order_acquire);
+  if (kState == CaptureState::kIdle) {
+    return config.arm ? ErrorCode::kNotConfigured : ErrorCode::kNone;
+  }
+  // Stop Tick() first: from here on the thread owns the capture setup.
+  state_.store(CaptureState::kConfigured, std::memory_order_release);
   if (!config.arm) {
-    buffer_.Disarm();
-    trigger_.Disarm();
-    resp.ok = true;
-    return resp;
+    return ErrorCode::kNone;
+  }
+  if (!IsValidTriggerMode(static_cast<uint8_t>(config.mode))) {
+    return ErrorCode::kBadConfig;
+  }
+  if (config.mode != TriggerMode::kImmediate && config.source_variable_id >= var_count_) {
+    return ErrorCode::kBadChannelId;
   }
 
-  if (!configured_) {
-    resp.ok = false;
-    resp.error_code = ErrorCode::kNotConfigured;
-    return resp;
-  }
-
-  if (config.source_variable_id >= var_count_) {
-    resp.ok = false;
-    resp.error_code = ErrorCode::kBadChannelId;
-    return resp;
-  }
-
-  trigger_config_ = config;
-
-  TriggerConfig tc;
-  tc.mode = config.trigger_mode;
-  tc.level = config.trigger_level;
-  tc.hysteresis_band = config.hysteresis_band;
-  trigger_.Configure(tc);
-
-  const float current_val = vars_[config.source_variable_id].getter ? vars_[config.source_variable_id].getter() : 0.0F;
-  prev_trigger_value_ = current_val;
-  trigger_.Arm(current_val);
+  trigger_source_ = config.source_variable_id;
+  trigger_mode_ = config.mode;
+  trigger_.Configure({.mode = config.mode, .level = config.level, .hysteresis_band = config.hysteresis_band});
+  prev_trigger_value_ = Read(trigger_source_);
+  trigger_.Arm(prev_trigger_value_);
+  decimation_counter_ = 0U;
   buffer_.Arm();
-
-  resp.ok = true;
-  return resp;
+  trigger_requested_.store(false, std::memory_order_relaxed);
+  state_.store(CaptureState::kArmed, std::memory_order_release);
+  return ErrorCode::kNone;
 }
 
-Device::ReadSamplesResponse Device::HandleReadSamples(uint16_t frame_offset, uint8_t max_frames) const {
-  ReadSamplesResponse resp;
-
-  const uint8_t clamped = static_cast<uint8_t>(std::min(static_cast<std::size_t>(max_frames), kMaxReadFrames));
-
-  const uint8_t ch = capture_config_.num_channels;
-  resp.num_channels = ch;
-
-  resp.triggered = buffer_.WasTriggered();
-
-  if (!resp.triggered) {
-    resp.end_of_data = false;
-    resp.num_samples = 0;
-    return resp;
+Device::ReadSamplesResult Device::HandleReadSamples(uint16_t frame_offset,
+                                                    uint8_t max_frames) const noexcept {
+  ReadSamplesResult result;
+  result.state = state_.load(std::memory_order_acquire);
+  if (result.state == CaptureState::kIdle) {
+    return result;
+  }
+  result.num_channels = capture_config_.num_channels;
+  result.num_samples = capture_config_.num_samples;
+  result.pretrigger_samples = capture_config_.pretrigger_samples;
+  result.sample_period_us = actual_sample_period_us_;
+  if (result.state != CaptureState::kComplete) {
+    return result;
   }
 
-  const uint16_t frames_read = buffer_.ReadFrames(frame_offset, clamped, resp.samples.data());
-
-  resp.num_samples = static_cast<uint8_t>(static_cast<std::size_t>(frames_read) * ch);
-
-  const uint16_t total = buffer_.num_samples();
-  resp.end_of_data = static_cast<uint32_t>(frame_offset) + frames_read >= total;
-
-  return resp;
+  const uint16_t kFrames = buffer_.ReadFrames(frame_offset, max_frames, result.samples);
+  result.sample_count = static_cast<uint8_t>(kFrames * result.num_channels);
+  result.end_of_data = static_cast<uint32_t>(frame_offset) + kFrames >= result.num_samples;
+  return result;
 }
 
-bool Device::Tick() {
-  if (!configured_ || !buffer_.IsArmed()) {
-    return buffer_.IsComplete();
+void Device::RequestTrigger() noexcept { trigger_requested_.store(true, std::memory_order_release); }
+
+bool Device::TakeTriggerEvent(TriggerEvent* event) noexcept {
+  if (event == nullptr || !trigger_event_pending_.exchange(false, std::memory_order_acquire)) {
+    return false;
   }
+  *event = {.source_variable_id = trigger_source_, .mode = trigger_mode_, .trigger_value = trigger_value_};
+  return true;
+}
 
-  // Evaluate trigger if armed.
-  if (trigger_.IsArmed()) {
-    const uint8_t src_id = trigger_config_.source_variable_id;
-    const float current_val = (src_id < var_count_ && vars_[src_id].getter) ? vars_[src_id].getter() : 0.0F;
+CaptureState Device::State() const noexcept { return state_.load(std::memory_order_acquire); }
 
-    if (trigger_.Evaluate(prev_trigger_value_, current_val)) {
+float Device::Read(uint8_t variable_id) const noexcept {
+  return (variable_id < var_count_) ? *vars_[variable_id].source : 0.0F;
+}
+
+bool Device::Tick() noexcept {
+  const CaptureState kState = state_.load(std::memory_order_acquire);
+  if (!IsCapturing(kState)) {
+    return kState == CaptureState::kComplete;
+  }
+  if (++decimation_counter_ < decimation_) {
+    return false;
+  }
+  decimation_counter_ = 0U;
+
+  // The trigger is evaluated once the pre-trigger part is recorded, so a
+  // complete capture never contains unrecorded frames.
+  if (kState == CaptureState::kArmed) {
+    const float kValue = Read(trigger_source_);
+    if (buffer_.PretriggerFilled() && (trigger_.Evaluate(prev_trigger_value_, kValue) ||
+                                       trigger_requested_.exchange(false, std::memory_order_acquire))) {
+      trigger_.Disarm();
       buffer_.Trigger();
+      trigger_value_ = kValue;
+      trigger_event_pending_.store(true, std::memory_order_release);
+      state_.store(CaptureState::kTriggered, std::memory_order_release);
     }
-    prev_trigger_value_ = current_val;
+    prev_trigger_value_ = kValue;
   }
 
-  // Sample all channels.
-  float frame[kMaxChannels] = {};
-  const uint8_t ch = capture_config_.num_channels;
-  for (uint8_t i = 0; i < ch; ++i) {
-    const uint8_t id = capture_config_.channel_ids[i];
-    frame[i] = (id < var_count_ && vars_[id].getter) ? vars_[id].getter() : 0.0F;
+  std::array<float, kMaxChannels> frame{};
+  for (uint8_t i = 0U; i < capture_config_.num_channels; ++i) {
+    frame[i] = Read(capture_config_.channel_ids[i]);
   }
   buffer_.WriteFrame(frame);
 
-  return buffer_.IsComplete();
-}
-
-void Device::ForceTrigger() {
-  if (buffer_.IsArmed()) {
-    buffer_.Trigger();
-    trigger_.Disarm();
+  if (buffer_.IsComplete()) {
+    state_.store(CaptureState::kComplete, std::memory_order_release);
+    return true;
   }
+  return false;
 }
 
 }  // namespace cymon

@@ -1,45 +1,59 @@
+// SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Tecnologic
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+/// @file trigger.hpp
+/// @brief Edge and hysteresis trigger of a capture.
 
 #pragma once
+
 #include <cstdint>
 
 namespace cymon {
 
-enum class TriggerMode : uint8_t { kRising = 0, kFalling = 1, kHysteresis = 2 };
-
-struct TriggerConfig {
-  TriggerMode mode = TriggerMode::kRising;
-  float level = 0.0F;
-  float hysteresis_band = 0.0F;
+/// Trigger condition; the values are those of cymon.TriggerMode.0.1.
+enum class TriggerMode : uint8_t {
+  kRising = 0,      ///< Fires when the value crosses the level upwards.
+  kFalling = 1,     ///< Fires when the value crosses the level downwards.
+  kHysteresis = 2,  ///< Rising edge, re-armed only after the value fell below level - band.
+  kImmediate = 3,   ///< Fires on the first sample (single shot without condition).
 };
 
+/// Returns true if @p raw is a valid TriggerMode value.
+[[nodiscard]] constexpr bool IsValidTriggerMode(uint8_t raw) noexcept {
+  return raw <= static_cast<uint8_t>(TriggerMode::kImmediate);
+}
+
+struct TriggerConfig {
+  TriggerMode mode{TriggerMode::kRising};
+  float level{0.0F};
+  float hysteresis_band{0.0F};
+};
+
+/**
+ * @brief Evaluates the trigger condition on consecutive samples of one variable.
+ *
+ * Fires at most once per Arm(). Allocation-free and lock-free; safe to call
+ * from an interrupt.
+ */
 class Trigger {
  public:
-  void Configure(const TriggerConfig& config);
-  // Arm the trigger. initial_value is used to initialize hysteresis state.
-  void Arm(float initial_value = 0.0F);
-  void Disarm();
-  // Returns true if trigger condition fires. Only fires once per arm.
-  bool Evaluate(float prev_value, float current_value);
-  bool IsArmed() const;
+  void Configure(const TriggerConfig& config) noexcept;
+
+  /// Arms the trigger. @p initial_value initializes the hysteresis state.
+  void Arm(float initial_value = 0.0F) noexcept;
+
+  void Disarm() noexcept;
+
+  /// Returns true when the condition fires; the trigger disarms itself then.
+  [[nodiscard]] bool Evaluate(float prev_value, float current_value) noexcept;
+
+  [[nodiscard]] bool IsArmed() const noexcept;
 
  private:
   TriggerConfig config_;
-  bool armed_ = false;
-  // hysteresis: waiting for value to drop below lower threshold
-  bool awaiting_low_ = false;
+  bool armed_{false};
+  /// Hysteresis: waiting for the value to drop below level - band.
+  bool awaiting_low_{false};
 };
 
 }  // namespace cymon

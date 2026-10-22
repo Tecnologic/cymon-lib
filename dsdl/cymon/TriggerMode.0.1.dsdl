@@ -1,0 +1,10 @@
+
+# Trigger condition of a capture (cymon::TriggerMode).
+
+uint8 RISING     = 0  # The source crosses the level upwards.
+uint8 FALLING    = 1  # The source crosses the level downwards.
+uint8 HYSTERESIS = 2  # Rising edge; fires again only after the source fell below level - hysteresis_band.
+uint8 IMMEDIATE  = 3  # Fires on the first sample after the pre-trigger part is recorded.
+
+uint8 value
+@sealed
